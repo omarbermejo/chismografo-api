@@ -38,7 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
 
 // POST /chismes — publicar chisme
 router.post('/', async (req: Request, res: Response) => {
-  const { texto, username, avatar_seed } = req.body
+  const { texto, username, avatar_seed, secreto } = req.body
 
   if (!texto?.trim()) {
     return res.status(400).json({ error: 'El texto no puede estar vacío' })
@@ -50,6 +50,7 @@ router.post('/', async (req: Request, res: Response) => {
       texto: texto.trim(),
       username: username?.trim() || 'anónimo',
       avatar_seed: avatar_seed?.trim() || 'anon',
+      secreto: secreto === true,
     })
     .select()
     .single()
