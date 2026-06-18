@@ -231,7 +231,7 @@ router.get('/user/:username', async (req: Request, res: Response) => {
 
 // GET /chismes/hashtag/:tag — chismes con un hashtag (debe ir ANTES de /:id)
 router.get('/hashtag/:tag', async (req: Request, res: Response) => {
-  const tag = req.params.tag.toLowerCase()
+  const tag = String(req.params.tag).toLowerCase()
   const { data: chismes, error } = await db
     .from('chismes')
     .select('*')
