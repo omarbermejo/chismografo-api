@@ -59,6 +59,40 @@ router.post('/', async (req: Request, res: Response) => {
   return res.status(201).json({ ...data, like_count: 0, repost_count: 0, comment_count: 0 })
 })
 
+// GET /chismes/search?q=... — búsqueda por texto (debe ir ANTES de /:id)
+router.get('/search', async (req: Request, res: Response) => {
+  const q = (req.query.q as string ?? '').trim()
+  if (!q) return res.json([])
+
+  const { data: chismes, error } = await db
+    .from('chismes')
+    .select('*')
+    .ilike('texto', `%${q}%`)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  if (error) return res.status(500).json({ error: error.message })
+
+  const ids = (chismes ?? []).map(c => c.id)
+  if (ids.length === 0) return res.json([])
+
+  const [{ data: likes }, { data: reposts }, { data: comentarios }] = await Promise.all([
+    db.from('likes').select('chisme_id').in('chisme_id', ids),
+    db.from('reposts').select('chisme_id').in('chisme_id', ids),
+    db.from('comentarios').select('chisme_id').in('chisme_id', ids),
+  ])
+
+  const count = (rows: { chisme_id: string }[] | null, id: string) =>
+    (rows ?? []).filter(r => r.chisme_id === id).length
+
+  return res.json((chismes ?? []).map(c => ({
+    ...c,
+    like_count: count(likes, c.id),
+    repost_count: count(reposts, c.id),
+    comment_count: count(comentarios, c.id),
+  })))
+})
+
 // GET /chismes/trending — top chismes por likes (debe ir ANTES de /:id)
 router.get('/trending', async (_req: Request, res: Response) => {
   const { data: chismes, error } = await db
