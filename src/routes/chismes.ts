@@ -125,6 +125,55 @@ router.get('/trending', async (_req: Request, res: Response) => {
   return res.json(result)
 })
 
+// GET /chismes/reposts — reposts recientes con el chisme original embebido (antes de /:id)
+router.get('/reposts', async (_req: Request, res: Response) => {
+  const { data: reposts, error } = await db
+    .from('reposts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  if (error) return res.status(500).json({ error: error.message })
+
+  const list = reposts ?? []
+  const ids = [...new Set(list.map(r => r.chisme_id))]
+  if (ids.length === 0) return res.json([])
+
+  const [{ data: chismes }, { data: likes }, { data: repostRows }, { data: comentarios }] = await Promise.all([
+    db.from('chismes').select('*').in('id', ids),
+    db.from('likes').select('chisme_id').in('chisme_id', ids),
+    db.from('reposts').select('chisme_id').in('chisme_id', ids),
+    db.from('comentarios').select('chisme_id').in('chisme_id', ids),
+  ])
+
+  const count = (rows: { chisme_id: string }[] | null, id: string) =>
+    (rows ?? []).filter(r => r.chisme_id === id).length
+
+  const byId = new Map((chismes ?? []).map(c => [c.id, c]))
+
+  const result = list
+    .map(r => {
+      const original = byId.get(r.chisme_id)
+      if (!original) return null
+      return {
+        id: r.id ?? `${r.chisme_id}-${r.created_at}`,
+        created_at: r.created_at,
+        username: r.username || 'anónimo',
+        avatar_seed: r.avatar_seed || 'anon',
+        texto: r.texto || null,
+        chisme: {
+          ...original,
+          like_count: count(likes, original.id),
+          repost_count: count(repostRows, original.id),
+          comment_count: count(comentarios, original.id),
+        },
+      }
+    })
+    .filter(Boolean)
+
+  return res.json(result)
+})
+
 // GET /chismes/:id — chisme individual con conteos
 router.get('/:id', async (req: Request, res: Response) => {
   const { data: chisme, error } = await db
@@ -193,7 +242,13 @@ router.post('/:id/likes', async (req: Request, res: Response) => {
 
 // POST /chismes/:id/reposts
 router.post('/:id/reposts', async (req: Request, res: Response) => {
-  const { error } = await db.from('reposts').insert({ chisme_id: req.params.id })
+  const { username, avatar_seed, texto } = req.body
+  const { error } = await db.from('reposts').insert({
+    chisme_id: req.params.id,
+    username: username?.trim() || 'anónimo',
+    avatar_seed: avatar_seed?.trim() || 'anon',
+    texto: texto?.trim() || null,
+  })
   if (error) return res.status(500).json({ error: error.message })
   return res.status(201).json({ ok: true })
 })
